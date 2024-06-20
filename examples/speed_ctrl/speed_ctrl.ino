@@ -11,15 +11,22 @@
 M3508_P19 MOTOR(1);
 
 void setup() {
-  // 初始化 CAN 总线
-  // Initialize the CAN bus
+
+  // 初始化 CAN 总线,在使用电机之前必须调用 can_init 函数
+  // Initialize the CAN bus,before use motor, must call can_init first
   // 参数 8: can收发芯片 TX 引脚
   // Parameter 8: transceiver chip TX pin
   // 参数 18: can收发芯片 RX 引脚
   // Parameter 18: transceiver chip RX pin
   // 参数 100: 当前电流更新频率，单位为赫兹
   // Parameter 100: Current update frequency in Hz
-  can_init(8, 18, 100);
+  can_init(8, 18, 100); //
+
+  while(MOTOR.is_online()==false){
+    // 等待电机上线
+    // Wait for the motor to be online
+    delay(100);
+  }
 }
 
 void loop() {
