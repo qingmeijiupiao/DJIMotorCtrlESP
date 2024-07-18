@@ -2,8 +2,8 @@
  * @Description: 用于控制大疆电机
  * @Author: qingmeijiupiao
  * @Date: 2024-04-13 21:00:21
- * @LastEditTime: 2024-06-19 22:11:23
- * @LastEditors: Please set LastEditors
+ * @LastEditTime: 2024-07-19 01:28:01
+ * @LastEditors: qingmeijiupiao
  * @rely:PID_CONTROL.hpp
 */
 
@@ -13,9 +13,10 @@
 
 #include <Arduino.h>//通用库，包含freertos相关文件
 #include <map> //std::map
-#include "PID_CONTROL.hpp"//PID控制器文件
+#include <functional>//std::function
 #include "driver/twai.h" //can驱动,esp32sdk自带
 
+#include "PID_CONTROL.hpp"//PID控制器文件
 /*↓↓↓本文件的类和函数↓↓↓*/
 
 //由于接受电调数据的类，用户无需创建对象
@@ -49,6 +50,7 @@ void feedback_update_task(void* n);
 void update_current_task(void* p);
 
 //添加用户自定义的can消息接收函数，用于处理非电机的数据,addr：要处理的消息的地址，func：回调函数
+void add_user_can_func(uint16_t addr,std::function<void(twai_message_t* can_message)> func);
 void add_user_can_func(uint16_t addr,void (*func)(twai_message_t* can_message));
 
 /*↑↑↑本文件的类和函数↑↑↑*/
@@ -172,6 +174,7 @@ class MOTOR{
         MOTOR(int id){
             //ID超过范围
             if(id<1 || id>8){
+                Serial.printf("ID=%d超过范围\n",id);
                 return;
             }
             ID=id;
@@ -185,6 +188,7 @@ class MOTOR{
         MOTOR(int id,pid_param location_pid,pid_param speed_pid){
             //ID超过范围
             if(id<1 || id>8){
+                Serial.printf("ID=%d超过范围\n",id);
                 return;
             }
             ID=id;
@@ -234,7 +238,7 @@ class MOTOR{
                 speed_pid_contraler.Kd=_speed_Kd;
                 speed_pid_contraler._dead_zone=__dead_zone;
                 max_curunt=_max_curunt;
-                if(max_curunt>16384){//最大电流限制
+                if(max_curunt>16384||max_curunt<=0){//最大电流限制
                     max_curunt=16384;
                 }
                 speed_pid_contraler._max_value=_max_curunt;
@@ -261,11 +265,13 @@ class MOTOR{
         int64_t get_location(){
             return data->location;
         }
+        //获取当前电流原始值
         int get_current_raw(){
             return data->get_current();
         }
+        //设置最大电流0-16384
         void set_max_curunt(float _max_curunt){
-            if(_max_curunt>16384)
+            if(_max_curunt>16384||max_curunt<=0)
                 _max_curunt=16384;
             max_curunt=_max_curunt;
         }
@@ -315,6 +321,10 @@ class MOTOR{
             taget_speed = speed;
             acceleration=acce;
         }
+        //获取转子目标速度
+        float get_taget_speed(){
+            return taget_speed;
+        }
         //设置电机加速度,当acce为0的时候,不启用加速度控制
         void set_acceleration(float acce=0){
             acce=acce>0?acce:0;
@@ -325,29 +335,31 @@ class MOTOR{
             return reduction_ratio;
         }
         //设置速度环位置误差系数,可以理解为转子每相差一圈位置误差就加 Kp RPM速度补偿
-        void set_speed_location_K(float _K){
+        void set_speed_location_K(float _K=1000){//可以简单理解为K越大转子越"硬",默认值为1000
             _K=_K>0?_K:-_K;
             speed_location_K=_K;
         }
-        
         /**
          * @description: 当电机的输出电流需要根据位置进行映射的时候，可以传入位置到电流映射函数的指针
          * 例如电机做摇臂控制电机时，电流需要做三角函数映射，那么可以传入经过三角函数的位置到电流映射函数的指针
          * @return {*}
          * @Author: qingmeijiupiao
          * @Date: 2024-04-23 14:00:29
-         * @param (int (*func_ptr)(int64_t location)) 返回值为电流值，输入为位置的映射函数指针
+         * @param 返回值为电流值(int)，输入为位置(int64_t)的映射函数或者lambda
          */
-        void add_location_to_current_func(int (*func_ptr)(int64_t location)){
-            location_to_current_func_ptr=func_ptr;
+        void add_location_to_current_func(std::function<int(int64_t)> func){// 建议传入std::function或者lambda
+            location_to_current_func=func;
+        }
+        void add_location_to_current_func(int (*func_ptr)(int64_t location)){// 传入函数指针的重载
+            location_to_current_func=func_ptr;
         }
     protected:
-        static int location_to_current(int64_t location){
+        //位置到电流的映射函数，默认返回0,当电流非线性时需要重写
+        std::function<int(int64_t)> location_to_current_func=null_location_to_current;
+        uint8_t ID;
+        static int null_location_to_current(int64_t location){
             return 0;
         }
-        uint8_t ID;
-        //位置到电流的映射函数，默认返回0,当电流非线性时需要重写
-        int (*location_to_current_func_ptr)(int64_t location)=location_to_current;
         int64_t location_taget=0;//位置环多圈目标位置
         int64_t speed_location_taget=0;//速度环多圈目标位置
         pid_param default_location_pid_parmater={10,0,0,2000,3000};//位置闭环默认控制参数   
@@ -394,6 +406,7 @@ class M3508_P19:public MOTOR{
             taget_speed = speed*19.0;
             acceleration=acce;
         }
+        //获取当前电流,单位mA
         float get_curunt_ma(){
             return 2e4*data->current/16384;
         }
@@ -430,6 +443,7 @@ class M2006_P36:public MOTOR{
             taget_speed = speed*36.0;
             acceleration=acce;
         }
+        //获取当前电流,单位mA
         float get_curunt_ma(){
             return 1e4*data->current/16384;
         }
@@ -444,83 +458,78 @@ class GM6020:public MOTOR{
     public:
         GM6020(int id){
             if(id<1 || id>7){
+                Serial.printf("GM6020 ID=%d超过范围\n",id);
                 return;
             }
-            data=motors[id+4];
+            data=motors[id+3];
             data->enable=true;
             data->is_GM6020=true;
             //设置默认PID参数
-            default_location_pid_parmater._max_value=350;
-            default_location_pid_parmater._dead_zone=0;
-            location_pid_contraler.setPram(default_location_pid_parmater);
-            speed_pid_contraler.setPram(default_speed_pid_parmater);
+            pid_param speed_pid_parmater(10,10,0,1,16384);
+            pid_param location_pid_parmater(0.3,0,0.002,20,350);
+            location_pid_contraler.setPram(location_pid_parmater);
+            speed_pid_contraler.setPram(speed_pid_parmater);
         };
         GM6020(int id,pid_param location_pid,pid_param speed_pid){
             if(id<1 || id>7){
+                Serial.printf("GM6020 ID=%d超过范围\n",id);
                 return;
             }
-            data=motors[id+4];
+            data=motors[id+3];
             data->enable=true;
             data->is_GM6020=true;
             //设置PID参数
-  
             location_pid_contraler.setPram(location_pid);
             speed_pid_contraler.setPram(speed_pid);
         };
-        void setup(int frc=100){
-            if(GM6020_update_handle==nullptr){
-                int _frc=frc;
-                xTaskCreate(GM6020_update,"GM6020_update",4096,&_frc,2,&GM6020_update_handle);
-            }
-        }
+        //返回实际电流,单位mA
         float get_curunt_ma(){
             return 3e3*data->current/16384;
         }
-    protected:
-        static void GM6020_update(void *m){
-            int frc =*(int*)m;
-            while(1){
-                if((motors[4]->enable&&motors[4]->is_GM6020)||(motors[5]->enable&&motors[5]->is_GM6020)||(motors[6]->enable&&motors[6]->is_GM6020)||(motors[7]->enable&&motors[7]->is_GM6020)){
-                    twai_message_t tx_msg;
-                    tx_msg.data_length_code=8;
-                    tx_msg.identifier = 0x1FE;
-                    tx_msg.self=0;
-                    tx_msg.extd=0;
-                    tx_msg.data[0] = motor_205.set_current >> 8;
-                    tx_msg.data[1] = motor_205.set_current&0xff;
-                    tx_msg.data[2] = motor_206.set_current >> 8;
-                    tx_msg.data[3] = motor_206.set_current&0xff;
-                    tx_msg.data[4] = motor_207.set_current >> 8;
-                    tx_msg.data[5] = motor_207.set_current&0xff;
-                    tx_msg.data[6] = motor_208.set_current >> 8;
-                    tx_msg.data[7] = motor_208.set_current&0xff;
-                    twai_transmit(&tx_msg,portMAX_DELAY);
-                }
-                if((motors[8]->enable&&motors[8]->is_GM6020)||(motors[9]->enable&&motors[9]->is_GM6020)||(motors[10]->enable&&motors[10]->is_GM6020)){
-                    twai_message_t tx_msg;
-                    tx_msg.data_length_code=8;
-                    tx_msg.identifier = 0x2FE;
-                    tx_msg.self=0;
-                    tx_msg.extd=0;
-                    tx_msg.data[0] = motor_209.set_current >> 8;
-                    tx_msg.data[1] = motor_209.set_current&0xff;
-                    tx_msg.data[2] = motor_20A.set_current >> 8;
-                    tx_msg.data[3] = motor_20A.set_current&0xff;
-                    tx_msg.data[4] = motor_20B.set_current >> 8;
-                    tx_msg.data[5] = motor_20B.set_current&0xff;
-                    tx_msg.data[6] = 0;
-                    tx_msg.data[7] = 0;
-                    twai_transmit(&tx_msg,portMAX_DELAY);
-                }
-                delay(1000/frc);
-            }
+        //转向角度，范围：0-360，单位：度
+        void set_angle(float angle,int8_t dir =0){//dir:0为最近方向,1为正方向,-1为负方向
+            // 确保 dir 为 -1、0 或 1
+            dir = dir > 0 ? 1 : (dir < 0 ? -1 : 0);
+            //确保angle在0-360度之间
+            angle=fmodf(angle,360.f)>0;
+            angle=angle>0?angle:360.f+angle;
+            //电机需要旋转的角度
+            float delta = angle - data->get_angle();
 
-        };
-        bool use_current_control = true;
-        TaskHandle_t GM6020_update_handle=nullptr;
+            while(dir*delta<0){//当dir不为0时向指定方向绕圈
+                delta+=dir*360;
+            }
+            if(abs(delta)>180&&dir==0){//找到最近方向
+                delta+=delta>0?-360:360;
+            }
+            set_location(data->get_location()+delta*8192);//转向角度转换为位置
+        }
+        //设置角度偏移量，范围：-180_180，单位：度
+        void set_angle_offset(float offset){
+            if(offset<-180.f){
+                while(offset<-180.f){
+                    offset+=360.f;
+                }
+            }
+            if(offset>180.f){
+                while(offset>180.f){
+                    offset-=360.f;
+                }
+            }
+            angle_offset = offset;
+        }
+        //返回角度，范围：0-360，单位：度
+        float get_angle(){
+            float angle_data=data->get_angle();//获取原始角度
+            angle_data+=angle_offset;//加上角度偏移
+            angle_data=fmodf(angle_data,360.f);//确保在0-360度之间
+            angle_data=angle_data>0?angle_data:360.f+angle_data;
+            return angle_data;   
+        }
+    protected:
+        float angle_offset = 0;//转子角度偏移量
         
 };
-
 //位置闭环控制任务;
 void location_contral_task(void* n){
     MOTOR* moto = (MOTOR*) n;
@@ -583,7 +592,7 @@ void speed_contral_task(void* n){
 
         //计算控制电流
         int16_t cru = 
-        /*位置映射的电流=*/moto->location_to_current_func_ptr(moto->data->location)
+        /*位置映射的电流=*/moto->location_to_current_func(moto->data->location)
         +
         /*PID控制器的计算电流=*/moto->speed_pid_contraler.control(err);
         
@@ -593,14 +602,16 @@ void speed_contral_task(void* n){
     }
 }
 
-//添加用户自定义的can消息接收函数，用于处理非电机的数据,addr：要处理的消息的地址，func：回调函数
-std::map<uint16_t,void(*)(twai_message_t*)> func_map;
+//添加用户自定义的can消息接收函数，用于处理非电机的数据,addr：要处理的消息的地址
+std::map<uint16_t,std::function<void(twai_message_t* can_message)>> func_map;
 
 void add_user_can_func(uint16_t addr,void (*func)(twai_message_t* can_message)){
     func_map[addr]=func;
 };
 
-
+void add_user_can_func(uint16_t addr,std::function<void(twai_message_t* can_message)> func){
+    func_map[addr]=func;
+};
 
 //接收CAN总线上的数据的任务函数
 void feedback_update_task(void* n){
@@ -626,9 +637,8 @@ void update_current_task(void* p){
     //电流控制频率
     int frc=*(int*) p;
     
-
     while(1){
-        //如果启用了1-4号任意一个电机就更新电流
+        //如果启用了(C620 C610)1-4号任意一个电机就更新电流
         if(motor_201.enable || motor_202.enable || motor_203.enable || motor_204.enable){
             twai_message_t tx_msg;
             tx_msg.data_length_code=8;
@@ -645,7 +655,7 @@ void update_current_task(void* p){
             tx_msg.data[7] = motor_204.set_current&0xff;
             twai_transmit(&tx_msg,portMAX_DELAY);
         }
-        //如果启用了5-8号任意一个电机就更新电流
+        //如果启用了(C620 C610)5-8号任意一个电机就更新电流
         if(motor_205.enable || motor_206.enable || motor_207.enable || motor_208.enable){
             twai_message_t tx_msg;
             tx_msg.data_length_code=8;
@@ -660,6 +670,40 @@ void update_current_task(void* p){
             tx_msg.data[5] = motor_207.set_current&0xff;
             tx_msg.data[6] = motor_208.set_current >> 8;
             tx_msg.data[7] = motor_208.set_current&0xff;
+            twai_transmit(&tx_msg,portMAX_DELAY);
+        }
+        //如果启用了GM6020 1-4号任意一个电机就更新电流
+        if((motors[4]->enable&&motors[4]->is_GM6020)||(motors[5]->enable&&motors[5]->is_GM6020)||(motors[6]->enable&&motors[6]->is_GM6020)||(motors[7]->enable&&motors[7]->is_GM6020)){
+            twai_message_t tx_msg;
+            tx_msg.data_length_code=8;
+            tx_msg.identifier = 0x1FE;
+            tx_msg.self=0;
+            tx_msg.extd=0;
+            tx_msg.data[0] = motor_205.set_current >> 8;
+            tx_msg.data[1] = motor_205.set_current&0xff;
+            tx_msg.data[2] = motor_206.set_current >> 8;
+            tx_msg.data[3] = motor_206.set_current&0xff;
+            tx_msg.data[4] = motor_207.set_current >> 8;
+            tx_msg.data[5] = motor_207.set_current&0xff;
+            tx_msg.data[6] = motor_208.set_current >> 8;
+            tx_msg.data[7] = motor_208.set_current&0xff;
+            twai_transmit(&tx_msg,portMAX_DELAY);
+        }
+        //如果启用了GM6020 5-8号任意一个电机就更新电流
+        if((motors[8]->enable&&motors[8]->is_GM6020)||(motors[9]->enable&&motors[9]->is_GM6020)||(motors[10]->enable&&motors[10]->is_GM6020)){
+            twai_message_t tx_msg;
+            tx_msg.data_length_code=8;
+            tx_msg.identifier = 0x2FE;
+            tx_msg.self=0;
+            tx_msg.extd=0;
+            tx_msg.data[0] = motor_209.set_current >> 8;
+            tx_msg.data[1] = motor_209.set_current&0xff;
+            tx_msg.data[2] = motor_20A.set_current >> 8;
+            tx_msg.data[3] = motor_20A.set_current&0xff;
+            tx_msg.data[4] = motor_20B.set_current >> 8;
+            tx_msg.data[5] = motor_20B.set_current&0xff;
+            tx_msg.data[6] = 0;
+            tx_msg.data[7] = 0;
             twai_transmit(&tx_msg,portMAX_DELAY);
         }
         //延时
