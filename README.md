@@ -2,7 +2,8 @@
 
 # DJIMotorCtrlESP
 重庆邮电大学HXC战队开源
-[![Arduino Library Badge](https://www.ardu-badge.com/badge/qingmeijiupiao/DJIMotorCtrlESP.svg?)](https://www.ardu-badge.com/qingmeijiupiao/DJIMotorCtrlESP)
+
+
 [![Compile Examples](https://github.com/qingmeijiupiao/DJIMotorCtrlESP/workflows/Compile%20Examples/badge.svg)](https://github.com/qingmeijiupiao/DJIMotorCtrlESP/actions?workflow=Compile+Examples)
 [![Check Arduino](https://github.com/qingmeijiupiao/DJIMotorCtrlESP/actions/workflows/check-arduino.yml/badge.svg)](https://github.com/qingmeijiupiao/DJIMotorCtrlESP/actions/workflows/check-arduino.yml)
 [![Check keywords.txt](https://github.com/qingmeijiupiao/DJIMotorCtrlESP/actions/workflows/check-keywords-txt.yml/badge.svg)](https://github.com/qingmeijiupiao/DJIMotorCtrlESP/actions/workflows/check-keywords-txt.yml)
