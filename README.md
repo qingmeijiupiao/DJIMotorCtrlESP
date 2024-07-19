@@ -40,7 +40,7 @@ void can_init(uint8_t TX_PIN=8, uint8_t RX_PIN=18, int current_update_hz=100);
   - `RX_PIN`: CAN总线RX引脚，默认为18。
   - `current_update_hz`: 电流更新频率，默认为100Hz。
 ---
-### 添加用户自定义CAN消息接收函数
+### 添加用户自定义CAN消息接收回调函数
 
 ```cpp
 void add_user_can_func(uint16_t addr, void (*func)(twai_message_t* can_message));
@@ -52,7 +52,32 @@ void add_user_can_func(uint16_t addr,std::function<void(twai_message_t* can_mess
 - **参数**:
   - `addr`: 要处理的消息的地址。
   - `func`: 回调函数。
+- **示例**:
+```cpp
+auto func1 = [](twai_message_t* can_message){
+    //打印收到的数据
+    for(int i=0;i<can_message->data_length_code;i++){
+      Serial.print(can_message->data[i],HEX);
+      Serial.print(" ");
+    }
+    Serial.println();
+}
+void func2(twai_message_t* can_message){
+    //打印收到的数据
+    for(int i=0;i<can_message->data_length_code;i++){
+      Serial.print(can_message->data[i],HEX);
+      Serial.print(" ");
+    }
+    Serial.println();
+}
+void setup() {
+  can_init();//必须初始化CAN总线才可以使用
+  add_user_can_func(0x255,func1);//收到0x255地址消息时自动调用func1
+  add_user_can_func(0x245,func2);//收到0x245地址消息时自动调用func2
+}
 
+
+```
 ---
 
 
@@ -137,6 +162,13 @@ void add_user_can_func(uint16_t addr,std::function<void(twai_message_t* can_mess
 ---
   - `void add_location_to_current_func(std::function<int(int64_t)> func)`: 添加位置到电流映射函数。
     - **参数**: `std::function<int(int64_t)> func` - 映射函数。
+---
+  - `void set_control_frequency(int _control_frequency=50)`: 设置闭环控制频率。
+  - 此频率影响速度闭环和位置闭环控制的频率,建议不要超过电流更新的频率。
+    - **参数**: `int _control_frequency` - 闭环控制频率,默认为50HZ。
+---
+  - `int get_control_frequency()`: 获取闭环控制频率。
+    - **返回值**: `int` - 闭环控制频率。
 
 ### M3508_P19
 
@@ -220,8 +252,8 @@ GM6020电机类。
     - **返回值**: `float` - 当前角度值(0-360)。
 
 
-## 不需要手动调用的类和函数
-
+## 内部调用的类和函数
+在外部调用以下的类和函数是不安全的。
 ### C600_DATA
 
 电调接收数据相关类，用户无需创建对象。
