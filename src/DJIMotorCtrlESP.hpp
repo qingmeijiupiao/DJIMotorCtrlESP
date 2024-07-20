@@ -2,7 +2,7 @@
  * @Description: 用于控制大疆电机
  * @Author: qingmeijiupiao
  * @Date: 2024-04-13 21:00:21
- * @LastEditTime: 2024-07-19 11:58:22
+ * @LastEditTime: 2024-07-20 19:16:28
  * @LastEditors: qingmeijiupiao
  * @rely:PID_CONTROL.hpp
 */
@@ -126,100 +126,6 @@ void add_user_can_func(uint16_t addr,void (*func)(twai_message_t* can_message));
 /*↑↑↑本文件的类和函数↑↑↑*/
 
 
-//电调接收数据相关,用户无需创建对象
-class C600_DATA{
-    //定义为友元，方便调用
-    friend void feedback_update_task(void* n);//总线数据接收和发送线程，全局只有一个任务
-    friend void update_current_task(void* n); //更新电流任务，全局只有一个任务
-    friend void location_contral_task(void* n);
-    friend void speed_contral_task(void* n);//速度闭环控制任务线程，每个电机都有自己的速度闭环控制任务，并且与位置闭环控制任务不同时存在
-    friend MOTOR;
-    friend M3508_P19;
-    friend M2006_P36;
-    friend GM6020;
-
-public:
-    C600_DATA(){}
-    ~C600_DATA(){}
-    //返回角度，范围：0-360，单位：度
-    float get_angle(){
-        return angle/8192.0;    
-    }
-    //返回转子速度，单位：RPM
-    int get_speed(){
-        return speed;
-    }
-    //返回电流
-    int get_current(){
-        return current;
-    }
-    //获取电机温度，单位：摄氏度
-    int get_tempertrue(){
-        return tempertrue;
-    }
-    //获取多圈位置,每8192为转子1圈
-    int64_t get_location(){
-        return location;
-    }
-    //重置当前多圈位置
-    void reset_location(int l=0){
-        location = l;
-    }
-    //判断电机是否在线
-    bool is_online(){
-        //超过100ms没有更新，就认为电机不在线
-        return micros()-last_location_update_time<100000;//100ms
-    }
-
-protected:
-    //多圈位置获取
-    void update_location(){
-        int16_t now_angle=angle;
-        if (last_location_update_time==0){
-            last_location_update_time=micros();
-        }
-
-        int now = micros();
-
-        int delta=0;
-
-        if((now_angle+8192-last_angle)%8192<4096){//正转
-            delta=now_angle-last_angle;
-            if (delta<0){
-                delta+=8192;
-            }
-        }else{
-            delta=now_angle-last_angle;
-            if (delta>0){
-                delta-=8192;
-            }
-        }
-
-        location += delta;
-        last_location_update_time=now;
-        last_angle=now_angle;   
-    }
-    //将CAN数据更新到变量
-    void update_data(twai_message_t can_message){
-        angle = can_message.data[0]<<8 | can_message.data[1];
-        speed = can_message.data[2]<<8 | can_message.data[3];
-        current = can_message.data[4]<<8 | can_message.data[5];
-        tempertrue = can_message.data[6];
-        update_location();
-    }
-    
-    uint16_t angle=0;
-    int16_t speed=0;
-    int16_t current=0;
-    uint8_t tempertrue=0;
-    int16_t set_current=0;
-    int64_t location =0;
-    bool enable=false;
-    int64_t last_location_update_time=0;
-    uint16_t last_angle=0;
-    bool is_GM6020 = false;
-
-};
 
 
 //1-8号电机数据接收对象,用户无需访问
@@ -572,13 +478,15 @@ class GM6020:public MOTOR{
         }
         //转向角度，范围：0-360，单位：度
         void set_angle(float angle,int8_t dir =0){//dir:0为最近方向,1为正方向,-1为负方向
+            float now_angle=get_angle();
+            reset_location(data->angle);
             // 确保 dir 为 -1、0 或 1
             dir = dir > 0 ? 1 : (dir < 0 ? -1 : 0);
             //确保angle在0-360度之间
             angle=fmodf(angle,360.f)>0;
             angle=angle>0?angle:360.f+angle;
             //电机需要旋转的角度
-            float delta = angle - data->get_angle();
+            float delta = angle-now_angle;
 
             while(dir*delta<0){//当dir不为0时向指定方向绕圈
                 delta+=dir*360;
@@ -586,7 +494,7 @@ class GM6020:public MOTOR{
             if(abs(delta)>180&&dir==0){//找到最近方向
                 delta+=delta>0?-360:360;
             }
-            set_location(data->get_location()+delta*8192);//转向角度转换为位置
+            set_location((delta+now_angle)*8192.f/360.f);//转向角度转换为位置
         }
         //设置角度偏移量，范围：-180_180，单位：度
         void set_angle_offset(float offset){
@@ -614,6 +522,105 @@ class GM6020:public MOTOR{
         float angle_offset = 0;//转子角度偏移量
         
 };
+
+
+//电调接收数据相关,用户无需创建对象
+class C600_DATA{
+    //定义为友元，方便调用
+    friend void feedback_update_task(void* n);//总线数据接收和发送线程，全局只有一个任务
+    friend void update_current_task(void* n); //更新电流任务，全局只有一个任务
+    friend void location_contral_task(void* n);
+    friend void speed_contral_task(void* n);//速度闭环控制任务线程，每个电机都有自己的速度闭环控制任务，并且与位置闭环控制任务不同时存在
+    friend MOTOR;
+    friend M3508_P19;
+    friend M2006_P36;
+    friend GM6020;
+
+public:
+    C600_DATA(){}
+    ~C600_DATA(){}
+    //返回角度，范围：0-360，单位：度
+    float get_angle(){
+        return angle/8192.0;    
+    }
+    //返回转子速度，单位：RPM
+    int get_speed(){
+        return speed;
+    }
+    //返回电流
+    int get_current(){
+        return current;
+    }
+    //获取电机温度，单位：摄氏度
+    int get_tempertrue(){
+        return tempertrue;
+    }
+    //获取多圈位置,每8192为转子1圈
+    int64_t get_location(){
+        return location;
+    }
+    //重置当前多圈位置
+    void reset_location(int l=0){
+        location = l;
+    }
+    //判断电机是否在线
+    bool is_online(){
+        //超过100ms没有更新，就认为电机不在线
+        return micros()-last_location_update_time<100000;//100ms
+    }
+
+protected:
+    //多圈位置获取
+    void update_location(){
+        int16_t now_angle=angle;
+        if (last_location_update_time==0){
+            last_location_update_time=micros();
+        }
+
+        int now = micros();
+
+        int delta=0;
+
+        if((now_angle+8192-last_angle)%8192<4096){//正转
+            delta=now_angle-last_angle;
+            if (delta<0){
+                delta+=8192;
+            }
+        }else{
+            delta=now_angle-last_angle;
+            if (delta>0){
+                delta-=8192;
+            }
+        }
+
+        location += delta;
+        last_location_update_time=now;
+        last_angle=now_angle;   
+    }
+    //将CAN数据更新到变量
+    void update_data(twai_message_t can_message){
+        angle = can_message.data[0]<<8 | can_message.data[1];
+        speed = can_message.data[2]<<8 | can_message.data[3];
+        current = can_message.data[4]<<8 | can_message.data[5];
+        tempertrue = can_message.data[6];
+        update_location();
+    }
+    
+    uint16_t angle=0;
+    int16_t speed=0;
+    int16_t current=0;
+    uint8_t tempertrue=0;
+    int16_t set_current=0;
+    int64_t location =0;
+    bool enable=false;
+    int64_t last_location_update_time=0;
+    uint16_t last_angle=0;
+    bool is_GM6020 = false;
+
+};
+
+
+
 //位置闭环控制任务;
 void location_contral_task(void* n){
     MOTOR* moto = (MOTOR*) n;
@@ -622,7 +629,9 @@ void location_contral_task(void* n){
     while (1){
         //位置闭环控制,由位置误差决定速度,再由速度误差决定电流
         speed = moto->location_pid_contraler.control(moto->location_taget - moto->data->location);
-        moto->taget_speed = speed;
+
+        moto->taget_speed = moto->data->is_online()*speed;//电机在线才有速度控制
+
         delay(1000/moto->control_frequency);
     }
 };
@@ -678,9 +687,9 @@ void speed_contral_task(void* n){
         int16_t cru = 
         /*位置映射的电流=*/moto->location_to_current_func(moto->data->location)
         +
-        /*PID控制器的计算电流=*/moto->speed_pid_contraler.control(err);
+        /*PID控制器的计算电流=*/moto->speed_pid_contraler.control(moto->data->is_online()*err);//电机在线才有正确的误差值
         
-        moto->data->set_current = cru;//设置电流
+        moto->data->set_current = cru;
         
         delay(1000/moto->control_frequency);
     }

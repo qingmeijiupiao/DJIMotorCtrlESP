@@ -14,6 +14,25 @@ esp32系列只需要外挂一颗CAN收发器，即可实现大疆电机控制。
 
 本文档提供了用于控制大疆电机的DJIMotorCtrlESP模块的详细API说明。
 
+
+## 使用流程
+创建电机对象->can初始化->设置PID参数(可选)->电机初始化->电机控制
+```cpp
+MOTOR motor1(1);/*←ID*/
+GM6020 motor2(2);/*←ID*/
+void setup(){
+  can_init();//必须在使用电机之前调用can初始化
+
+  //motor1.set_speed_pid(1,0,0,0,1000);//设置位置闭环控制参数
+  //motor1.set_location_pid(1,0,0,0,1000);//设置位置闭环控制参数
+
+  motor1.setup();
+  motor2.setup();
+
+  motor1.set_speed(1000);//设置电机转速
+  motor2.set_angle(180.0);//设置电机转向角度
+}
+```
 ## 包含文件
 
 ```cpp
@@ -163,9 +182,9 @@ void setup() {
   - `void add_location_to_current_func(std::function<int(int64_t)> func)`: 添加位置到电流映射函数。
     - **参数**: `std::function<int(int64_t)> func` - 映射函数。
 ---
-  - `void set_control_frequency(int _control_frequency=50)`: 设置闭环控制频率。
+  - `void set_control_frequency(int _control_frequency=200)`: 设置闭环控制频率。
   - 此频率影响速度闭环和位置闭环控制的频率,建议不要超过电流更新的频率。
-    - **参数**: `int _control_frequency` - 闭环控制频率,默认为50HZ。
+    - **参数**: `int _control_frequency` - 闭环控制频率,默认为200HZ。
 ---
   - `int get_control_frequency()`: 获取闭环控制频率。
     - **返回值**: `int` - 闭环控制频率。
