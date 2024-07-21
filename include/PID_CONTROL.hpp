@@ -2,8 +2,8 @@
  * @Description: PID控制器
  * @Author: qingmeijiupiao
  * @Date: 2024-04-13 21:00:21
- * @LastEditTime: 2024-06-06 22:52:24
- * @LastEditors: Please set LastEditors
+ * @LastEditTime: 2024-07-21 12:05:00
+ * @LastEditors: qingmeijiupiao
  */
 
 #ifndef PID_CONTROL_HPP
