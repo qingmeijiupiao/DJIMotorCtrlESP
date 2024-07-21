@@ -2,7 +2,7 @@
  * @Description: 用于控制大疆电机
  * @Author: qingmeijiupiao
  * @Date: 2024-04-13 21:00:21
- * @LastEditTime: 2024-07-20 19:01:57
+ * @LastEditTime: 2024-07-21 15:06:17
  * @LastEditors: qingmeijiupiao
  * @rely:PID_CONTROL.hpp
 */
@@ -77,8 +77,8 @@
                     ####                                                                            
                       K                                                                             
 */
-#ifndef _C600_HPP_
-#define _C600_HPP_
+#ifndef _DJIMotorCtrlESP_HPP_
+#define _DJIMotorCtrlESP_HPP_
 
 
 #include <Arduino.h>//通用库，包含freertos相关文件
