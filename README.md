@@ -60,25 +60,15 @@ void can_init(uint8_t TX_PIN=8, uint8_t RX_PIN=18, int current_update_hz=100);
 ### 添加用户自定义CAN消息接收回调函数
 
 ```cpp
-void add_user_can_func(uint16_t addr, void (*func)(twai_message_t* can_message));
-
 void add_user_can_func(uint16_t addr,std::function<void(twai_message_t* can_message)> func);
 ```
 添加用户自定义的CAN消息接收函数，用于处理非电机的数据。
 
 - **参数**:
   - `addr`: 要处理的消息的地址。
-  - `func`: 回调函数。
+  - `func`: 回调函数,可以是:lamda表达式,函数指针,静态类成员函数,std::function。
 - **示例**:
 ```cpp
-auto func1 = [](twai_message_t* can_message){
-    //打印收到的数据
-    for(int i=0;i<can_message->data_length_code;i++){
-      Serial.print(can_message->data[i],HEX);
-      Serial.print(" ");
-    }
-    Serial.println();
-}
 void func2(twai_message_t* can_message){
     //打印收到的数据
     for(int i=0;i<can_message->data_length_code;i++){
@@ -89,11 +79,19 @@ void func2(twai_message_t* can_message){
 }
 void setup() {
   can_init();//必须初始化CAN总线才可以使用
-  add_user_can_func(0x255,func1);//收到0x255地址消息时自动调用func1
+  add_user_can_func(0x255,
+    [](twai_message_t* can_message){//lamda表达式
+      //打印收到的数据
+      for(int i=0;i<can_message->data_length_code;i++){
+        Serial.print(can_message->data[i],HEX);
+        Serial.print(" ");
+      }
+      Serial.println();
+    }
+  );//收到0x255地址消息时自动调用这个lamda表达式
+
   add_user_can_func(0x245,func2);//收到0x245地址消息时自动调用func2
 }
-
-
 ```
 ---
 
