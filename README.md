@@ -1,5 +1,3 @@
-
-
 # DJIMotorCtrlESP
 重庆邮电大学HXC战队开源
 
@@ -321,5 +319,3 @@ void feedback_update_task(void* n);
 void update_current_task(void* p);
 ```
 更新电流任务，全局只有一个任务，用户无需调用。
-
-
