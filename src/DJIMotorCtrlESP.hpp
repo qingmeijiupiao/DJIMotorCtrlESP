@@ -2,7 +2,7 @@
  * @Description: 用于控制大疆电机
  * @Author: qingmeijiupiao
  * @Date: 2024-04-13 21:00:21
- * @LastEditTime: 2024-07-21 15:17:10
+ * @LastEditTime: 2024-07-21 15:18:40
  * @LastEditors: qingmeijiupiao
  * @rely:PID_CONTROL.hpp
 */
@@ -444,7 +444,7 @@ class MOTOR{
         }
         int64_t location_taget=0;//位置环多圈目标位置
         int64_t speed_location_taget=0;//速度环多圈目标位置
-        pid_param default_location_pid_parmater={0.5,0.1,0,2000,3000};//位置闭环默认控制参数   
+        pid_param default_location_pid_parmater={0.1,0.1,0,2000,3000};//位置闭环默认控制参数   
         PID_CONTROL location_pid_contraler;//位置闭环控制PID计算对象
         pid_param default_speed_pid_parmater={5,1,0.01,1,10000};//速度闭环默认控制参数
         PID_CONTROL speed_pid_contraler;//速度闭环控制PID计算对象
