@@ -121,7 +121,6 @@ void update_current_task(void* p);
 
 //添加用户自定义的can消息接收函数，用于处理非电机的数据,addr：要处理的消息的地址，func：回调函数
 void add_user_can_func(int addr,std::function<void(twai_message_t* can_message)> func);
-void add_user_can_func(int addr,void (*func)(twai_message_t* can_message));
 
 /*↑↑↑本文件的类和函数↑↑↑*/
 
@@ -694,10 +693,6 @@ void speed_contral_task(void* n){
 
 //添加用户自定义的can消息接收函数，用于处理非电机的数据,addr：要处理的消息的地址
 std::map<int,std::function<void(twai_message_t* can_message)>> func_map;
-
-void add_user_can_func(int addr,void (*func)(twai_message_t* can_message)){
-    func_map[addr]=func;
-};
 
 void add_user_can_func(int addr,std::function<void(twai_message_t* can_message)> func){
     func_map[addr]=func;
