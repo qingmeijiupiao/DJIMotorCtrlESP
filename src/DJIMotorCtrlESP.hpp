@@ -2,7 +2,7 @@
  * @Description: 用于控制大疆电机
  * @Author: qingmeijiupiao
  * @Date: 2024-04-13 21:00:21
- * @LastEditTime: 2024-07-21 15:18:40
+ * @LastEditTime: 2024-07-22 14:47:55
  * @LastEditors: qingmeijiupiao
  * @rely:PID_CONTROL.hpp
 */
@@ -238,7 +238,10 @@ class MOTOR{
         friend void speed_contral_task(void* n);
         friend void update_current_task(void* n);
     public:
-        MOTOR(){};
+        //禁止电机拷贝传递
+        MOTOR(const MOTOR&) = delete;
+        MOTOR& operator=(const MOTOR&) = delete;
+
         //id从1-8
         MOTOR(int id){
             //ID超过范围
@@ -436,6 +439,7 @@ class MOTOR{
             location_to_current_func=func_ptr;
         }
     protected:
+        MOTOR(){};
         //位置到电流的映射函数，默认返回0,当电流非线性时需要重写
         std::function<int(int64_t)> location_to_current_func=null_location_to_current;
         uint8_t ID;
