@@ -2,7 +2,7 @@
  * @Description: 用于控制大疆电机
  * @Author: qingmeijiupiao
  * @Date: 2024-04-13 21:00:21
- * @LastEditTime: 2024-07-22 14:47:55
+ * @LastEditTime: 2024-08-13 06:58:42
  * @LastEditors: qingmeijiupiao
  * @rely:PID_CONTROL.hpp
 */
@@ -246,7 +246,6 @@ class MOTOR{
         MOTOR(int id){
             //ID超过范围
             if(id<1 || id>8){
-                Serial.printf("ID=%d超过范围\n",id);
                 return;
             }
             ID=id;
@@ -260,7 +259,6 @@ class MOTOR{
         MOTOR(int id,pid_param location_pid,pid_param speed_pid){
             //ID超过范围
             if(id<1 || id>8){
-                Serial.printf("ID=%d超过范围\n",id);
                 return;
             }
             ID=id;
@@ -545,7 +543,6 @@ class GM6020:public MOTOR{
     public:
         GM6020(int id){
             if(id<1 || id>7){
-                Serial.printf("GM6020 ID=%d超过范围\n",id);
                 return;
             }
             data=motors[id+3];
@@ -559,7 +556,6 @@ class GM6020:public MOTOR{
         };
         GM6020(int id,pid_param location_pid,pid_param speed_pid){
             if(id<1 || id>7){
-                Serial.printf("GM6020 ID=%d超过范围\n",id);
                 return;
             }
             data=motors[id+3];
@@ -635,9 +631,6 @@ void location_contral_task(void* n){
         delay(1000/moto->control_frequency);
     }
 };
-
-
-
 
 //速度闭环控制任务
 void speed_contral_task(void* n){
@@ -808,7 +801,6 @@ void can_init(uint8_t TX_PIN, uint8_t RX_PIN,int current_update_hz){
     twai_status_info_t now_twai_status;
     auto status = twai_get_status_info(&now_twai_status);
     if(status != ESP_ERR_INVALID_STATE){//如果驱动重复安装
-        Serial.println("can is installed do not need install again");
         return;
     }
 
