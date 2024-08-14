@@ -12,6 +12,8 @@ esp32系列只需要外挂一颗CAN收发器，即可实现大疆电机控制。
 
 本文档提供了用于控制大疆电机的DJIMotorCtrlESP模块的详细API说明。
 
+## ESP-IDF兼容
+IDFCompatible文件夹中的文件扔到IDF里面并添加编译就能使用了
 
 ## 使用流程
 创建电机对象->can初始化->设置PID参数(可选)->电机初始化->电机控制
@@ -48,14 +50,14 @@ void setup(){
 ### CAN初始化函数
 
 ```cpp
-void can_init(uint8_t TX_PIN=8, uint8_t RX_PIN=18, int current_update_hz=100);
+void can_init(uint8_t TX_PIN=8, uint8_t RX_PIN=18, int current_update_hz=200);
 ```
 初始化CAN总线通信，必须在使用电机之前调用此函数。
 
 - **参数**:
   - `TX_PIN`: CAN总线TX引脚，默认为8。
   - `RX_PIN`: CAN总线RX引脚，默认为18。
-  - `current_update_hz`: 电流更新频率，默认为100Hz。
+  - `current_update_hz`: 电流更新频率，默认为200Hz。
 ---
 ### 添加用户自定义CAN消息接收回调函数
 
