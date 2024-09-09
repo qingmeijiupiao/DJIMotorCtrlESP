@@ -319,3 +319,32 @@ void feedback_update_task(void* n);
 void update_current_task(void* p);
 ```
 更新电流任务，全局只有一个任务，用户无需调用。
+
+### 代码示例
+
+```c
+// 速度控制
+M3508_P19 MOTOR(1);
+void setup()
+{
+  can_init(8, 18, 100);
+}
+void loop()
+{
+  MOTOR.set_speed(50, 10);
+}
+
+// 位置控制
+M3508_P19 MOTOR(1);
+void setup()
+{
+    can_init(8, 18, 100);
+    MOTOR.setup();
+}
+void loop()
+{
+    MOTOR.set_location(8192 * 20);
+}
+```
+
+倘若用户想要更改速度控制和位置控制的PID参数，可直接通过电机类对参数进行进一步更改。
