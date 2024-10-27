@@ -2,7 +2,7 @@
  * @Description: 用于控制大疆电机
  * @Author: qingmeijiupiao
  * @Date: 2024-04-13 21:00:21
- * @LastEditTime: 2024-08-13 06:58:42
+ * @LastEditTime: 2024-10-27 19:55:56
  * @LastEditors: qingmeijiupiao
  * @rely:PID_CONTROL.hpp
 */
@@ -84,10 +84,12 @@
 #include <Arduino.h>//通用库，包含freertos相关文件
 #include <map> //std::map
 #include <functional>//std::function
-#include "driver/twai.h" //can驱动,esp32sdk自带
-
+#include "ESP_CAN.hpp"//can通信库
 #include "PID_CONTROL.hpp"//PID控制器文件
 /*↓↓↓本文件的类和函数↓↓↓*/
+
+//CAN初始化函数，要使用电机，必须先调用此函数初始化CAN通信
+void can_init(uint8_t TX_PIN=8,uint8_t RX_PIN=18,/*电流更新频率=*/int current_update_hz=200);
 
 //由于接受电调数据的类，用户无需创建对象
 class C600_DATA;
@@ -104,23 +106,14 @@ class M2006_P36;
 //GM6020电机类
 class GM6020;
 
-//CAN初始化函数，要使用电机，必须先调用此函数初始化CAN通信
-void can_init(uint8_t TX_PIN=8,uint8_t RX_PIN=18,/*电流更新频率=*/int current_update_hz=200);
-
 //位置闭环控制任务函数,使用位置控制函数时创建此任务,基于速度闭环控制任务函数,每个电机都有自己的位置闭环控制任务，用户无需调用
 void location_contral_task(void* n);
 
 //速度闭环控制任务函数，每个电机都有自己的速度闭环控制任务，用户无需调用
 void speed_contral_task(void* n);
 
-//总线数据接收和发送线程，全局只有一个任务，用户无需调用
-void feedback_update_task(void* n);
-
 //更新电流任务，全局只有一个任务，用户无需调用
 void update_current_task(void* p);
-
-//添加用户自定义的can消息接收函数，用于处理非电机的数据,addr：要处理的消息的地址，func：回调函数
-void add_user_can_func(int addr,std::function<void(twai_message_t* can_message)> func);
 
 /*↑↑↑本文件的类和函数↑↑↑*/
 
@@ -128,7 +121,7 @@ void add_user_can_func(int addr,std::function<void(twai_message_t* can_message)>
 //电调接收数据相关,用户无需创建对象
 class C600_DATA{
     //定义为友元，方便调用
-    friend void feedback_update_task(void* n);//总线数据接收和发送线程，全局只有一个任务
+    friend void moto_fb_fun(twai_message_t* can_message);//电机反馈函数
     friend void update_current_task(void* n); //更新电流任务，全局只有一个任务
     friend void location_contral_task(void* n);
     friend void speed_contral_task(void* n);//速度闭环控制任务线程，每个电机都有自己的速度闭环控制任务，并且与位置闭环控制任务不同时存在
@@ -688,28 +681,6 @@ void speed_contral_task(void* n){
     }
 }
 
-//添加用户自定义的can消息接收函数，用于处理非电机的数据,addr：要处理的消息的地址
-std::map<int,std::function<void(twai_message_t* can_message)>> func_map;
-
-void add_user_can_func(int addr,std::function<void(twai_message_t* can_message)> func){
-    func_map[addr]=func;
-};
-
-//接收CAN总线上的数据的任务函数
-void feedback_update_task(void* n){
-    twai_message_t rx_message;
-    while (1){
-        //接收CAN上数据
-        ESP_ERROR_CHECK(twai_receive(&rx_message, portMAX_DELAY));
-        //如果是电机数据就更新到对应的对象
-        if(rx_message.identifier>=0x201 && rx_message.identifier<=0x20B){
-            motors[rx_message.identifier-0x201]->update_data(rx_message);
-        //查看是否为用户需要的can消息地址，如果是就调用用户自定义函数
-        }else if(func_map.find(rx_message.identifier)!=func_map.end()){
-            func_map[rx_message.identifier](&rx_message);
-        }
-    }
-}
 
 
 
@@ -794,36 +765,18 @@ void update_current_task(void* p){
 }
 
 
+void moto_fb_fun(twai_message_t* can_message){//电机反馈函数
+    motors[can_message->identifier-0x201]->update_data(*can_message);
+}
 
 //初始化CAN总线
 void can_init(uint8_t TX_PIN, uint8_t RX_PIN,int current_update_hz){
-    //检测TWAI驱动是否已经安装
-    twai_status_info_t now_twai_status;
-    auto status = twai_get_status_info(&now_twai_status);
-    if(status != ESP_ERR_INVALID_STATE){//如果驱动重复安装
-        return;
-    }
 
-    //TX是指CAN收发芯片的TX,RX同理
-    //总线速率,1Mbps
-    static const twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
-    //滤波器设置,接受所有地址的数据
-    static const twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-    //总线配置
-    static const twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(gpio_num_t(TX_PIN), gpio_num_t(RX_PIN), TWAI_MODE_NO_ACK);
-
-    //传入驱动配置信息
-    twai_driver_install(&g_config, &t_config, &f_config);
-    
-    //CAN驱动启动
-    twai_start();
-    //创建任务
-    
-    xTaskCreate(feedback_update_task,"moto_fb",4096,nullptr,5,nullptr);//电机反馈任务
+    can_setup(TX_PIN,RX_PIN);
     xTaskCreate(update_current_task,"update_current_task",4096,&current_update_hz,5,nullptr);//电流控制任务
-    delay(100);
+    for(int i=1;i<=0xB;i++){//添加电机反馈函数到can回调map
+        add_user_can_func(0x20+i,moto_fb_fun);
+    }
 }
-
-
 
 #endif

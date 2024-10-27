@@ -36,11 +36,12 @@ void setup(){
 ## 包含文件
 
 ```cpp
-//以下4个文件包含在esp32 Arduino SDK中无需手动安装
+//以下3个文件包含在esp32 Arduino SDK中无需手动安装
 #include <Arduino.h>
 #include <map>
 #include <functional>
-#include "driver/twai.h"
+//can通信库，本模块附带
+#include "ESP_CAN.hpp"
 //PID控制器文件，本模块附带
 #include "PID_CONTROL.hpp"
 ```
@@ -305,13 +306,6 @@ void location_contral_task(void* n);
 void speed_contral_task(void* n);
 ```
 速度闭环控制任务函数，每个电机都有自己的速度闭环控制任务，用户无需调用。
-
-### 总线数据接收和发送线程
-
-```cpp
-void feedback_update_task(void* n);
-```
-总线数据接收和发送线程，全局只有一个任务，用户无需调用。
 
 ### 更新电流任务
 
