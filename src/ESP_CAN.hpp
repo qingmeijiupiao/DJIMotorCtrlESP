@@ -1,173 +1,11 @@
 /*
- * @Description: PID控制器
+ * @Description: 对twai库的二次封装,实现CAN回调函数,默认1Mbps波特率
  * @Author: qingmeijiupiao
  * @Date: 2024-04-13 21:00:21
- * @LastEditTime: 2024-10-27 20:02:21
+ * @LastEditTime: 2024-10-27 19:54:37
  * @LastEditors: qingmeijiupiao
- */
-
-#ifndef PID_CONTROL_HPP
-#define PID_CONTROL_HPP
-#include <Arduino.h>
-// PID参数结构体
-struct pid_param
-{
-    float Kp;         // 比例系数
-    float Ki;         // 积分系数
-    float Kd;         // 微分系数
-    float _dead_zone; // 死区
-    float _max_value; // 最大值
-    pid_param(float P = 0, float I = 0, float D = 0, float dead_zone = 100, float max_value = 10000)
-    {
-        Kp = P;
-        Ki = I;
-        Kd = D;
-        _dead_zone = dead_zone;
-        _max_value = max_value;
-    }
-};
-
-class PID_CONTROL
-{
-public:
-    PID_CONTROL() {}
-    
-    /**
-     * @description: PID控制器构造函数
-     * @return {*}
-     * @Author: qingmeijiupiao
-     * @Date: 2024-05-04 22:30:59
-     * @param {float} P 比例系数
-     * @param {float} I 积分系数
-     * @param {float} D 微分系数
-     * @param {float} dead_zone 死区
-     * @param {float} max_value 输出限幅
-     */
-    PID_CONTROL(float P, float I, float D, float dead_zone = 0, float max_value = 0)
-    {
-        Kp = P;
-        Ki = I;
-        Kd = D;
-        _dead_zone = dead_zone;
-        _max_value = max_value;
-        integral = 0.0;
-        prevError = 0.0;
-        last_contrl_time = 0;
-    }
-    PID_CONTROL(pid_param par)
-    {
-        Kp = par.Kp;
-        Ki = par.Ki;
-        Kd = par.Kd;
-        _dead_zone = par._dead_zone;
-        _max_value = par._max_value;
-        integral = 0.0;
-        prevError = 0.0;
-        last_contrl_time = 0;
-    }
-    double control(double error)
-    {
-        if (abs(error) < _dead_zone)
-        {
-            error = 0;
-        }
-        double time_p = micros() - last_contrl_time;
-        if (last_contrl_time == 0 || time_p < 0)
-        {
-            time_p = 1;
-        }
-        // 计算时间,确保ki，kd在不同控制频率的一致性
-        time_p = 0.000001*time_p;
-        // 计算比例项
-        double proportional = Kp * error;
-
-
-        
-        integral += (time_p * Ki * error);
-        // 积分限幅
-        if(abs(integral) > _max_value){
-            integral= integral>0?_max_value:-_max_value;
-        }
-        // 计算积分项
-        //当Kp大于限幅时，积分项不增加
-        if(abs(proportional) > _max_value){
-            integral=0;
-        }
-        double derivative = 0;
-        // 计算微分项
-        if (time_p != 0)
-            derivative = Kd * (error - prevError) / time_p;
-        prevError = error;
-        // 计算总的控制输出
-        double output = proportional + integral + derivative;
-        last_contrl_time = micros();
-        if (abs(output) > _max_value)
-        {
-            return output > 0 ? _max_value : -1 * _max_value;
-        }
-        return output;
-    }
-    // 重置控制器状态
-    void reset()
-    {
-        integral = 0.0;
-        prevError = 0.0;
-    }
-    // 修改控制器参数
-    void setPram(float P = 0, float I = 0, float D = 0, float dead_zone = 0, float max_value = 0)
-    {
-        if (P != 0)
-        {
-            Kp = P;
-        }
-        if (I != 0)
-        {
-            Ki = I;
-        }
-        if (D != 0)
-        {
-            Kd = D;
-        }
-        if (dead_zone != 0)
-        {
-            _dead_zone = dead_zone;
-        }
-        if (max_value != 0)
-        {
-            _max_value = max_value;
-        }
-        reset();
-    }
-    void setPram(pid_param pid)
-    {
-        setPram(pid.Kp, pid.Ki, pid.Kd, pid._dead_zone, pid._max_value);
-    }
-    pid_param getParam()
-    {
-        return pid_param(Kp, Ki, Kd, _dead_zone, _max_value);
-    }
-    double operator>>(double error)
-    {
-        return control(error);
-    }
-    double operator<<(double error)
-    {
-        return control(error);
-    }
-
-    // private:
-    double Kp;         // 比例系数
-    double Ki;         // 积分系数
-    double Kd;         // 微分系数
-    double _max_value; // 输出限幅
-    double _dead_zone; // 死区
-    double setpoint;   // 设定值
-    double integral;   // 积分项
-    double prevError;  // 上一次误差
-    double last_contrl_time = 0;
-};
-
-#endif
+ * @rely:PID_CONTROL.hpp
+*/
 /*
                                               .=%@#=.                                               
                                             -*@@@@@@@#=.                                            
@@ -239,3 +77,72 @@ public:
                     ####                                                                            
                       K                                                                             
 */
+#ifndef ESP_CAN_HPP
+#define ESP_CAN_HPP
+#include "driver/twai.h" //can驱动,esp32sdk自带
+
+/*↓↓↓本文件的类和函数↓↓↓*/
+
+//初始化CAN
+void  can_setup(uint8_t TX_PIN=8, uint8_t RX_PIN=18);
+
+//添加用户自定义的can消息接收函数，用于处理非电机的数据,addr：要处理的消息的地址，func：回调函数
+void  add_user_can_func(int addr,std::function<void(twai_message_t* can_message)> func);
+
+//电机反馈任务,无需手动创建
+void  feedback_update_task(void* n);
+
+/*↑↑↑本文件的类和函数↑↑↑*/
+
+
+
+//初始化CAN
+void  can_setup(uint8_t TX_PIN, uint8_t RX_PIN){
+    //TX是指CAN收发芯片的TX,RX同理
+    //检测TWAI驱动是否已经安装
+    twai_status_info_t now_twai_status;
+    auto status = twai_get_status_info(&now_twai_status);
+    if(status != ESP_ERR_INVALID_STATE){//如果驱动重复安装
+        return;
+    }
+
+
+    //总线速率,1Mbps
+    static const twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
+    //滤波器设置,接受所有地址的数据
+    static const twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+    //总线配置
+    static const twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(gpio_num_t(TX_PIN), gpio_num_t(RX_PIN), TWAI_MODE_NO_ACK);
+
+    //传入驱动配置信息
+    twai_driver_install(&g_config, &t_config, &f_config);
+    //CAN驱动启动
+    twai_start();
+    //创建任务
+    xTaskCreate(feedback_update_task,"can_fb",4096,nullptr,5,nullptr);//can反馈任务
+
+};
+
+//CAN反馈函数
+using CAN_FEEDBACK_FUNC = std::function<void(twai_message_t* can_message)>;
+
+std::map<int,CAN_FEEDBACK_FUNC> func_map;//can回调map
+
+//添加用户自定义的can消息接收函数，用于处理非电机的数据,addr：要处理的消息的地址
+void add_user_can_func(int addr,std::function<void(twai_message_t* can_message)> func){
+    func_map[addr]=func;
+};
+
+//接收CAN总线上的数据的任务函数
+void feedback_update_task(void* n){
+    twai_message_t rx_message;
+    while (1){
+        //接收CAN上数据
+        ESP_ERROR_CHECK(twai_receive(&rx_message, portMAX_DELAY));
+        //查看是否为需要的can消息地址，如果是就调用函数
+        if(func_map.find(rx_message.identifier)!=func_map.end()){
+            func_map[rx_message.identifier](&rx_message);
+        }
+    }
+}
+#endif
